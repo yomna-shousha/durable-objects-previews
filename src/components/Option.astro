@@ -1,0 +1,109 @@
+---
+interface Props {
+	id: string;
+	letter: string;
+	title: string;
+	cost: string;
+	tone: "good" | "warn" | "bad";
+	verdict: string;
+}
+
+const { id, letter, title, cost, tone, verdict } = Astro.props;
+---
+
+<section class="option" id={id}>
+	<header>
+		<span class="letter">{letter}</span>
+		<div>
+			<h3>{title}</h3>
+			<div class="meta">
+				<span class={`badge ${tone}`}>{verdict}</span>
+				<span class="cost">{cost}</span>
+			</div>
+		</div>
+	</header>
+	<div class="body">
+		<slot />
+	</div>
+	{
+		(Astro.slots.has("pros") || Astro.slots.has("cons")) && (
+			<div class="pc">
+				{Astro.slots.has("pros") && (
+					<div>
+						<h4>Good</h4>
+						<slot name="pros" />
+					</div>
+				)}
+				{Astro.slots.has("cons") && (
+					<div>
+						<h4>Watch out</h4>
+						<slot name="cons" />
+					</div>
+				)}
+			</div>
+		)
+	}
+</section>
+
+<style>
+	.option {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.25rem 1.4rem 0.4rem;
+		margin: 0 0 1.25rem;
+	}
+
+	header {
+		display: flex;
+		gap: 0.9rem;
+		align-items: flex-start;
+		margin-bottom: 0.75rem;
+	}
+
+	.letter {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 8px;
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-weight: 700;
+	}
+
+	h3 {
+		margin: 0 0 0.3rem;
+	}
+
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		align-items: center;
+	}
+
+	.cost {
+		font-family: var(--mono);
+		font-size: 0.85rem;
+		color: var(--fg-muted);
+	}
+
+	.pc {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: 0 1.5rem;
+	}
+
+	h4 {
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--fg-muted);
+		margin: 0.25rem 0 0.4rem;
+	}
+
+	.pc :global(ul) {
+		padding-left: 1.2rem;
+	}
+</style>

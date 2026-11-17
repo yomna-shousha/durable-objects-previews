@@ -1,0 +1,38 @@
+# Example GitHub Actions workflow that deploys the shared host pattern from main.
+# Assumes host/ and app/ each have a package.json that lists wrangler.
+#
+# The staging host is redeployed from main too, so Previews always run against
+# the Durable Object code that is on main.
+#
+# Required repository secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Deploy the host first so the app's bindings resolve.
+      - run: npm ci
+        working-directory: host
+      - run: npx wrangler deploy
+        working-directory: host
+      - run: npx wrangler deploy --env staging
+        working-directory: host
+
+      - run: npm ci
+        working-directory: app
+      - run: npx wrangler deploy
+        working-directory: app

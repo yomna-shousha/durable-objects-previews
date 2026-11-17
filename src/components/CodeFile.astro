@@ -1,0 +1,44 @@
+---
+import { Code } from "astro:components";
+
+interface Props {
+	path: string;
+	code: string;
+	lang: "js" | "jsonc" | "yaml" | "sh";
+}
+
+const { path, code, lang } = Astro.props;
+const repo = "https://github.com/yomna-shousha/durable-objects-previews/blob/main/";
+---
+
+<figure>
+	<figcaption>
+		<a href={repo + path}>{path}</a>
+	</figcaption>
+	<Code code={code.trimEnd()} lang={lang} theme="github-dark-default" />
+</figure>
+
+<style>
+	figure {
+		margin: 0 0 1.25rem;
+	}
+
+	figcaption {
+		font-family: var(--mono);
+		font-size: 0.8rem;
+		margin-bottom: 0.35rem;
+	}
+
+	figcaption a {
+		color: var(--fg-muted);
+		text-decoration: none;
+	}
+
+	figcaption a:hover {
+		color: var(--accent);
+	}
+
+	figure :global(pre) {
+		margin: 0;
+	}
+</style>

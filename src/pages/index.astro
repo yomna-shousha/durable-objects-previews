@@ -1,0 +1,470 @@
+---
+import Base from "../layouts/Base.astro";
+import Option from "../components/Option.astro";
+import Calculator from "../components/Calculator.astro";
+import CodeFile from "../components/CodeFile.astro";
+
+import hostConfig from "../../examples/02-shared-host/host/wrangler.jsonc?raw";
+import hostIndex from "../../examples/02-shared-host/host/src/index.js?raw";
+import appConfig from "../../examples/02-shared-host/app/wrangler.jsonc?raw";
+import appIndex from "../../examples/02-shared-host/app/src/index.js?raw";
+import isolatedConfig from "../../examples/02-shared-host/app/wrangler.isolated.jsonc?raw";
+import isolatedIndex from "../../examples/02-shared-host/app/src/isolated.js?raw";
+import previewWorkflow from "../../examples/ci/preview.yml?raw";
+
+const repo = "https://github.com/yomna-shousha/durable-objects-previews";
+const docs = "https://developers.cloudflare.com";
+---
+
+<Base
+	title="Durable Objects and Worker Previews: keep your namespace count flat"
+	description="Why every Preview of a Worker with Durable Objects uses namespaces, how fast that adds up, and the patterns that keep the count flat. Tested, with runnable examples."
+>
+	<main>
+		<div class="eyebrow">Cloudflare Workers · Durable Objects · Previews</div>
+		<h1>Durable Objects and Worker Previews: keep your namespace count flat</h1>
+		<p class="lede">
+			Each Durable Object class uses one namespace in production and another in every Preview. If every pull
+			request gets a Preview, the count grows with your open PRs until you hit the account limit and deploys fail.
+			This page explains how the count works and compares the patterns that avoid it. Every result here was
+			measured, and every example is runnable.
+		</p>
+
+		<ul class="toc">
+			<li><a href="#tldr">TL;DR</a></li>
+			<li><a href="#counting">How namespaces are counted</a></li>
+			<li><a href="#calculator">Calculator</a></li>
+			<li><a href="#options">Options</a></li>
+			<li><a href="#compare">Comparison</a></li>
+			<li><a href="#setup">Set up the shared host</a></li>
+			<li><a href="#measured">What we measured</a></li>
+			<li><a href="#faq">FAQ</a></li>
+		</ul>
+
+		<h2 id="tldr">TL;DR</h2>
+		<ul>
+			<li>
+				<strong>A Worker that defines Durable Object classes gets one namespace per class, in production and in
+				every Preview.</strong> Namespaces are created at deploy time, even for classes the Preview never calls.
+			</li>
+			<li>
+				<strong>To stop Previews from adding namespaces, move the classes into a separate Worker that you never
+				preview.</strong> Bind to it with <code>script_name</code>. In our test, Previews of the app Worker
+				created <strong>zero</strong> new namespaces.
+			</li>
+			<li>
+				<strong>For PRs that change Durable Object code, use an isolated Preview.</strong> A CI path filter keeps
+				that cost to the PRs that need it.
+			</li>
+			<li>
+				<strong>Delete Previews when PRs close.</strong> Their namespaces are freed right away.
+			</li>
+		</ul>
+
+		<h2 id="counting">How namespaces are counted</h2>
+		<p>
+			A <a href={`${docs}/durable-objects/`}>Durable Object</a> namespace is one class in one Worker. When you run
+			<code>wrangler preview</code>, Cloudflare
+			<a href={`${docs}/workers/previews/resources/#durable-objects`}>gives the Preview its own namespace</a> for each
+			class, so Previews never read or overwrite each other's state. Those namespaces count toward the same account
+			limit as production. That limit is
+			<a href={`${docs}/durable-objects/platform/limits/`}>500 on Workers Paid and 100 on Free</a>.
+		</p>
+		<div class="formula">namespaces = classes × (1 production + number of Previews)</div>
+		<p>
+			Namespaces are named <code>&lt;worker&gt;_&lt;Class&gt;</code> in production and
+			<code>&lt;worker&gt;_&lt;preview&gt;_&lt;Class&gt;</code> in a Preview. A Worker with 3 classes and 150 open
+			PR Previews uses <strong>453 namespaces</strong> on its own.
+		</p>
+		<div class="callout warn">
+			<p>
+				<strong>Unused classes still count.</strong> A Preview gets a namespace for every class in your
+				migrations, whether or not the branch's code uses it. In our test, a class that nothing ever called still
+				got its own namespace in production and in each Preview.
+			</p>
+		</div>
+
+		<h2 id="calculator">Calculator</h2>
+		<p>Plug in your numbers to compare the three workable options below.</p>
+		<Calculator />
+
+		<h2 id="options">Options</h2>
+
+		<Option
+			id="option-a"
+			letter="A"
+			title="Isolated Previews (the default)"
+			cost="classes × each Preview"
+			tone="warn"
+			verdict="Fine for a few PRs"
+		>
+			<p>
+				Keep the classes in your Worker and run <code>wrangler preview</code> for each PR. This is what the
+				<a href={`${docs}/workers/previews/resources/#durable-objects`}>Previews docs</a> describe. Each Preview
+				gets fresh, empty Durable Object storage and runs the branch's Durable Object code.
+			</p>
+			<p>
+				Example: <a href={`${repo}/tree/main/examples/01-per-preview`}><code>examples/01-per-preview</code></a>
+			</p>
+			<ul slot="pros">
+				<li>Full isolation, with no shared state.</li>
+				<li>Tests the branch's Durable Object code.</li>
+				<li>Zero setup.</li>
+			</ul>
+			<ul slot="cons">
+				<li>Cost grows with every open PR.</li>
+				<li>Adding a Durable Object class multiplies the cost.</li>
+			</ul>
+		</Option>
+
+		<Option
+			id="option-b"
+			letter="B"
+			title="Shared Durable Object host"
+			cost="fixed: classes × 2"
+			tone="good"
+			verdict="Recommended for many PRs"
+		>
+			<p>
+				Move the Durable Object classes into their own Worker, the <em>host</em>, and deploy it only from
+				<code>main</code>. Your app Worker has no classes and no migrations. It binds to the host with
+				<code>script_name</code>. Previews of the app create no namespaces.
+			</p>
+			<p>
+				Deploy two copies of the host: one for production and one for Previews (staging). Previews then never
+				touch production state. Inside the staging host, each Preview keeps its state separate by prefixing
+				object names with its PR number.
+			</p>
+			<p>
+				Example: <a href={`${repo}/tree/main/examples/02-shared-host`}><code>examples/02-shared-host</code></a>
+				· <a href="#setup">Setup guide</a>
+			</p>
+			<ul slot="pros">
+				<li>Namespace count stays flat no matter how many PRs are open.</li>
+				<li>
+					<a href={`${docs}/workers/versions-and-deployments/version-urls/`}>Version URLs</a> work on the app
+					Worker, because it no longer defines a Durable Object.
+				</li>
+				<li>No production state is reachable from Previews.</li>
+			</ul>
+			<ul slot="cons">
+				<li>Previews run the host's <em>deployed</em> Durable Object code, not the branch's.</li>
+				<li>Previews share one staging namespace per class, so isolation relies on key prefixes.</li>
+				<li>
+					Data a Preview writes stays in the staging host after the Preview is deleted. Expire it with an alarm or
+					clean it up in a job.
+				</li>
+			</ul>
+		</Option>
+
+		<Option
+			id="option-c"
+			letter="C"
+			title="Shared host, isolated when Durable Object code changes"
+			cost="classes × 2 + classes × each DO-changing PR"
+			tone="good"
+			verdict="Best of both"
+		>
+			<p>
+				Use option B by default. When a PR changes Durable Object code, CI deploys an isolated Preview instead. It
+				uses a second Wrangler config whose entry point also exports the classes. Only those PRs pay for namespaces.
+			</p>
+			<p>
+				The isolated config targets a separate Worker (<code>my-app-isolated</code>), so its migrations never
+				touch the production app Worker. That Worker is created automatically on its first Preview.
+			</p>
+			<p>
+				Example: <a href={`${repo}/blob/main/examples/02-shared-host/app/wrangler.isolated.jsonc`}><code>wrangler.isolated.jsonc</code></a>
+				and the <a href={`${repo}/blob/main/examples/ci/preview.yml`}>CI workflow</a>
+			</p>
+			<ul slot="pros">
+				<li>Low, predictable cost.</li>
+				<li>Durable Object changes are still tested in isolation.</li>
+			</ul>
+			<ul slot="cons">
+				<li>Two Wrangler configs to keep in sync.</li>
+				<li>Isolated Previews use a different hostname (<code>pr-N-my-app-isolated…</code>).</li>
+			</ul>
+		</Option>
+
+		<h3>Patterns that don't help</h3>
+
+		<Option
+			id="option-separate-workers"
+			letter="✕"
+			title="A separate Worker per PR"
+			cost="classes × each PR"
+			tone="bad"
+			verdict="Not recommended"
+		>
+			<p>
+				Deploying <code>my-app-pr-123</code> as its own Worker, with a name suffix or a Wrangler environment, costs
+				the same per PR as option A. You also have to clean up the Workers yourself. Switch to
+				<code>wrangler preview</code> to keep everything under one Worker and get built-in cleanup.
+			</p>
+		</Option>
+
+		<Option
+			id="option-version-urls"
+			letter="✕"
+			title="Version URLs on the Worker that defines the classes"
+			cost="n/a"
+			tone="bad"
+			verdict="Not available"
+		>
+			<p>
+				<a href={`${docs}/workers/versions-and-deployments/version-urls/#limitations`}>Version URLs are not generated</a>
+				for Workers that implement a Durable Object. They also run against production resources, so they would
+				share production state. Once you move the classes out (option B), version URLs work on the app Worker.
+			</p>
+		</Option>
+
+		<Option
+			id="option-script-name"
+			letter="✕"
+			title="Point a Preview's bindings back at production"
+			cost="classes × each Preview"
+			tone="bad"
+			verdict="Still creates namespaces"
+		>
+			<p>
+				Adding <code>script_name</code> to <code>previews.durable_objects.bindings</code> doesn't stop
+				namespace creation while the same Worker still exports the classes. We tested this, and the Preview still
+				got its own namespaces. The classes have to live in a different Worker.
+			</p>
+		</Option>
+
+		<h3>Also worth doing</h3>
+		<ul>
+			<li>
+				<strong>Delete Previews when PRs close</strong> with
+				<code>wrangler preview delete --name pr-123</code>. Their namespaces are freed right away. A
+				<a href={`${docs}/workers/previews/#limits`}>Worker can have up to 500 Previews</a>. When it reaches that,
+				the least recently deployed Preview is deleted automatically, but that cap is higher than most accounts'
+				namespace limit.
+			</li>
+			<li>
+				<strong>Merge small classes.</strong> Each class is a namespace in every copy of the Worker. One class that
+				routes by name is cheaper than several tiny ones.
+			</li>
+			<li>
+				<strong>Ask for a higher limit</strong> with the
+				<a href={`${docs}/durable-objects/platform/limits/`}>limit increase form</a> if you still need it. This buys
+				time, but cost still grows with PR count unless you change the pattern.
+			</li>
+		</ul>
+
+		<h2 id="compare">Comparison</h2>
+		<div class="table-wrap">
+			<table>
+				<thead>
+					<tr>
+						<th></th>
+						<th>New namespaces per Preview</th>
+						<th>Runs the branch's DO code</th>
+						<th>State isolation</th>
+						<th>Setup</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td><strong>A.</strong> Isolated Previews</td>
+						<td><span class="badge warn">one per class</span></td>
+						<td>Yes</td>
+						<td>Separate namespace</td>
+						<td>None</td>
+					</tr>
+					<tr>
+						<td><strong>B.</strong> Shared host</td>
+						<td><span class="badge good">0</span></td>
+						<td>No (runs <code>main</code>)</td>
+						<td>Key prefix in staging host</td>
+						<td>Split Workers</td>
+					</tr>
+					<tr>
+						<td><strong>C.</strong> Shared host + isolated</td>
+						<td><span class="badge good">0</span>, or one per class if DO code changed</td>
+						<td>When it changed</td>
+						<td>Key prefix, or separate namespace</td>
+						<td>Split Workers + CI path filter</td>
+					</tr>
+					<tr>
+						<td>Separate Worker per PR</td>
+						<td><span class="badge bad">one per class</span></td>
+						<td>Yes</td>
+						<td>Separate namespace</td>
+						<td>Manual cleanup</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+
+		<h3>Which should I pick?</h3>
+		<ul>
+			<li>
+				<strong>A few open PRs at a time, or Durable Object code changes in most PRs:</strong> option A, and delete
+				Previews when PRs close.
+			</li>
+			<li>
+				<strong>Many open PRs:</strong> option C. Use option B if you don't need isolated Durable Object testing
+				per PR.
+			</li>
+		</ul>
+
+		<h2 id="setup">Set up the shared host</h2>
+		<p>
+			This walks through <a href={`${repo}/tree/main/examples/02-shared-host`}><code>examples/02-shared-host</code></a>.
+			The code below is pulled straight from the repository.
+		</p>
+
+		<h3>1. Move the classes into a host Worker</h3>
+		<p>
+			The host holds the classes and the migrations. Its <code>staging</code> environment deploys a second copy
+			for Previews. Both copies should be deployed from <code>main</code>.
+		</p>
+		<CodeFile path="examples/02-shared-host/host/wrangler.jsonc" code={hostConfig} lang="jsonc" />
+		<CodeFile path="examples/02-shared-host/host/src/index.js" code={hostIndex} lang="js" />
+
+		<h3>2. Bind the app to the host</h3>
+		<p>
+			The app has no classes and no migrations. Production binds to <code>my-app-do</code>, and Previews bind to
+			<code>my-app-do-staging</code>.
+		</p>
+		<CodeFile path="examples/02-shared-host/app/wrangler.jsonc" code={appConfig} lang="jsonc" />
+
+		<h3>3. Scope object names per Preview</h3>
+		<p>
+			Every Preview talks to the same staging namespace, so prefix object names with a scope. CI sets the scope to
+			the PR number with <code>--var PREVIEW_SCOPE:pr-123</code>.
+		</p>
+		<CodeFile path="examples/02-shared-host/app/src/index.js" code={appIndex} lang="js" />
+
+		<h3>4. Add the isolated fallback (option C)</h3>
+		<p>
+			A second entry point re-exports the classes. A second config gives that Worker its own migrations and local
+			bindings.
+		</p>
+		<CodeFile path="examples/02-shared-host/app/src/isolated.js" code={isolatedIndex} lang="js" />
+		<CodeFile path="examples/02-shared-host/app/wrangler.isolated.jsonc" code={isolatedConfig} lang="jsonc" />
+
+		<h3>5. Choose the Preview type in CI</h3>
+		<p>
+			This GitHub Actions workflow runs a shared Preview by default and an isolated one when <code>host/src</code>
+			changed. It deletes both when the PR closes. A matching
+			<a href={`${repo}/blob/main/examples/ci/deploy.yml`}>deploy workflow</a> deploys the hosts and the app from
+			<code>main</code>.
+		</p>
+		<CodeFile path="examples/ci/preview.yml" code={previewWorkflow} lang="yaml" />
+
+		<h2 id="measured">What we measured</h2>
+		<p>
+			We deployed the examples in this repository and counted namespaces with the
+			<a href={`${docs}/api/resources/durable_objects/subresources/namespaces/methods/list/`}>namespaces API</a>
+			(<a href={`${repo}/blob/main/examples/scripts/count-namespaces.sh`}><code>count-namespaces.sh</code></a>)
+			after each step. Each Worker has 2 classes, <code>Counter</code> and <code>Chat</code>. Nothing ever calls
+			<code>Chat</code>.
+		</p>
+		<div class="table-wrap">
+			<table>
+				<thead>
+					<tr>
+						<th>Step</th>
+						<th>New namespaces</th>
+						<th>Created</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Deploy a Worker that defines 2 classes</td>
+						<td>+2</td>
+						<td><code>my-app_Counter</code>, <code>my-app_Chat</code></td>
+					</tr>
+					<tr>
+						<td><code>wrangler preview --name pr-1</code>, then <code>pr-2</code></td>
+						<td>+2 each</td>
+						<td><code>my-app_pr-1_Counter</code>, <code>my-app_pr-1_Chat</code>, …</td>
+					</tr>
+					<tr>
+						<td>Preview bindings pointed at production with <code>script_name</code> (same Worker)</td>
+						<td>+2</td>
+						<td>Still a separate namespace per class</td>
+					</tr>
+					<tr>
+						<td><code>wrangler preview delete</code></td>
+						<td>−2</td>
+						<td>Freed right away</td>
+					</tr>
+					<tr>
+						<td>Deploy host (production + staging) and app</td>
+						<td>+4</td>
+						<td><code>my-app-do_*</code>, <code>my-app-do-staging_*</code>. The app adds none.</td>
+					</tr>
+					<tr>
+						<td>3 Previews of the app Worker</td>
+						<td><strong>0</strong></td>
+						<td>All bind to the staging host</td>
+					</tr>
+					<tr>
+						<td>Version URL of the app Worker (<code>versions upload --preview-alias</code>)</td>
+						<td><strong>0</strong></td>
+						<td>URL generated, because the app defines no Durable Object</td>
+					</tr>
+					<tr>
+						<td>Isolated Preview (<code>--config wrangler.isolated.jsonc</code>) with no prior deploy</td>
+						<td>+2</td>
+						<td>Worker created automatically. Only <code>my-app-isolated_pr-6_*</code>, no production namespaces.</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<p>
+			At runtime, we called <code>/count</code> twice on production, two shared Previews and the isolated Preview.
+			Each returned <code>1</code> then <code>2</code> under its own scope. Calls across Workers through
+			<code>script_name</code> worked, and the scopes didn't interfere.
+		</p>
+		<p class="muted">
+			Tested with Wrangler 4.164.0 on November 17, 2026. <code>wrangler preview</code> is in open beta, so behavior
+			may change. Re-run the examples to confirm on your account.
+		</p>
+
+		<h2 id="faq">FAQ</h2>
+
+		<h3>Can a Preview of the app bind to a Preview of the host?</h3>
+		<p>
+			Not today, as far as we know. We didn't find a way to do it.
+			<a href={`${docs}/workers/previews/resources/#service-bindings`}>Service bindings from a Preview</a> call the
+			bound Worker's production deployment. Our examples assume Durable Object <code>script_name</code> bindings
+			behave the same way. That's why option C bundles the classes into the app instead.
+		</p>
+
+		<h3>Does a Preview need the classes if the branch doesn't touch Durable Objects?</h3>
+		<p>
+			With option A, yes. The classes and migrations are part of the Worker, so every Preview gets them. To skip
+			them, the Preview has to come from a Worker that doesn't define them, which is option B.
+		</p>
+
+		<h3>Does deleting the app Preview delete its data?</h3>
+		<p>
+			With option A, yes: the namespace and its storage are deleted with the Preview. With option B, no. The data
+			lives in the staging host under the Preview's scope. Expire it with
+			<a href={`${docs}/durable-objects/api/alarms/`}>alarms</a>, or call
+			<code>ctx.storage.deleteAll()</code> from a cleanup job.
+		</p>
+
+		<h3>What about Containers?</h3>
+		<p>
+			<a href={`${docs}/workers/previews/resources/#containers`}>Containers</a> are backed by Durable Objects, so
+			each Preview gets its own namespace and container app. The same counting applies. We haven't tested the shared
+			host pattern with Containers.
+		</p>
+
+		<footer>
+			<p>
+				Community example, not official Cloudflare documentation. For the source of truth, see the
+				<a href={`${docs}/workers/previews/`}>Previews docs</a> and
+				<a href={`${docs}/durable-objects/platform/limits/`}>Durable Objects limits</a>.
+			</p>
+			<p><a href={repo}>Source and runnable examples on GitHub</a> · MIT license</p>
+		</footer>
+	</main>
+</Base>

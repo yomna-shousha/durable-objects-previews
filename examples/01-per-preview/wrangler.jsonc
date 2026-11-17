@@ -1,0 +1,10 @@
+{
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "my-app",
+	"main": "src/index.js",
+	"compatibility_date": "2026-11-17",
+	"workers_dev": true,
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter", "Chat"] }],
+	// Every Preview gets its own namespace for each class above.
+	"previews": {}
+}

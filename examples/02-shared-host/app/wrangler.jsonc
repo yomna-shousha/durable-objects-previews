@@ -1,0 +1,26 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	// No Durable Object classes and no migrations here, so Previews of this
+	// Worker create no namespaces.
+	"name": "my-app",
+	"main": "src/index.js",
+	"compatibility_date": "2026-11-17",
+	"workers_dev": true,
+	"durable_objects": {
+		"bindings": [
+			{ "name": "COUNTER", "class_name": "Counter", "script_name": "my-app-do" },
+			{ "name": "CHAT", "class_name": "Chat", "script_name": "my-app-do" }
+		]
+	},
+	"previews": {
+		// Fallback scope. CI overrides it per pull request with
+		// --var PREVIEW_SCOPE:pr-<number>
+		"vars": { "PREVIEW_SCOPE": "preview" },
+		"durable_objects": {
+			"bindings": [
+				{ "name": "COUNTER", "class_name": "Counter", "script_name": "my-app-do-staging" },
+				{ "name": "CHAT", "class_name": "Chat", "script_name": "my-app-do-staging" }
+			]
+		}
+	}
+}

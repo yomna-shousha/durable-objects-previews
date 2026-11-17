@@ -1,0 +1,181 @@
+---
+---
+
+<div class="calc" id="calc">
+	<div class="inputs">
+		<label>
+			<span>Durable Object classes in the Worker</span>
+			<input type="number" name="classes" min="1" max="50" value="3" />
+		</label>
+		<label>
+			<span>Open pull requests with a Preview</span>
+			<input type="number" name="prs" min="0" max="5000" value="150" />
+		</label>
+		<label>
+			<span>% of those PRs that change Durable Object code</span>
+			<input type="number" name="pct" min="0" max="100" value="10" />
+		</label>
+		<label>
+			<span>Account namespace limit</span>
+			<input type="number" name="limit" min="1" max="100000" value="500" />
+		</label>
+	</div>
+
+	<div class="results">
+		<div class="row" data-key="a">
+			<div class="label"><strong>A.</strong> Isolated Previews (default)</div>
+			<div class="bar"><span></span></div>
+			<div class="value"></div>
+		</div>
+		<div class="row" data-key="b">
+			<div class="label"><strong>B.</strong> Shared Durable Object host</div>
+			<div class="bar"><span></span></div>
+			<div class="value"></div>
+		</div>
+		<div class="row" data-key="c">
+			<div class="label"><strong>C.</strong> Shared host + isolated when needed</div>
+			<div class="bar"><span></span></div>
+			<div class="value"></div>
+		</div>
+	</div>
+	<p class="note">
+		Counts only this app. Every other Worker in the account also uses one namespace per Durable Object class, and
+		all of them share the same limit.
+	</p>
+</div>
+
+<script>
+	const root = document.getElementById("calc")!;
+	const input = (name: string) => root.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+
+	function render() {
+		const classes = Math.max(0, Number(input("classes").value) || 0);
+		const prs = Math.max(0, Number(input("prs").value) || 0);
+		const pct = Math.min(100, Math.max(0, Number(input("pct").value) || 0));
+		const limit = Math.max(1, Number(input("limit").value) || 1);
+
+		const values: Record<string, number> = {
+			// production + one copy per Preview
+			a: classes * (1 + prs),
+			// production host + staging host; app Previews add nothing
+			b: classes * 2,
+			// as B, plus isolated Previews for PRs that change Durable Object code
+			c: classes * 2 + classes * Math.ceil((prs * pct) / 100),
+		};
+
+		for (const [key, value] of Object.entries(values)) {
+			const row = root.querySelector<HTMLElement>(`.row[data-key="${key}"]`)!;
+			const ratio = value / limit;
+			const bar = row.querySelector<HTMLElement>(".bar span")!;
+			bar.style.width = `${Math.min(100, ratio * 100)}%`;
+			row.dataset.state = ratio >= 1 ? "over" : ratio >= 0.7 ? "near" : "ok";
+			row.querySelector(".value")!.textContent = `${value.toLocaleString()} / ${limit.toLocaleString()}`;
+		}
+	}
+
+	root.addEventListener("input", render);
+	render();
+</script>
+
+<style>
+	.calc {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--bg-soft);
+		padding: 1.25rem 1.4rem;
+		margin: 0 0 1.5rem;
+	}
+
+	.inputs {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		gap: 0.9rem 1.25rem;
+		margin-bottom: 1.4rem;
+	}
+
+	label {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		gap: 0.35rem;
+		font-size: 0.85rem;
+		color: var(--fg-muted);
+	}
+
+	input {
+		font: inherit;
+		font-size: 1rem;
+		color: var(--fg);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.4rem 0.6rem;
+		width: 100%;
+	}
+
+	input:focus {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+
+	.row {
+		display: grid;
+		grid-template-columns: minmax(12rem, 1.3fr) 2fr auto;
+		gap: 0.75rem;
+		align-items: center;
+		padding: 0.35rem 0;
+		font-size: 0.92rem;
+	}
+
+	.bar {
+		height: 0.7rem;
+		border-radius: 999px;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		overflow: hidden;
+	}
+
+	.bar span {
+		display: block;
+		height: 100%;
+		background: var(--good);
+		transition: width 0.2s ease;
+	}
+
+	.row[data-state="near"] .bar span {
+		background: var(--warn);
+	}
+
+	.row[data-state="over"] .bar span {
+		background: var(--bad);
+	}
+
+	.value {
+		font-family: var(--mono);
+		font-size: 0.85rem;
+		min-width: 8.5rem;
+		text-align: right;
+	}
+
+	.row[data-state="over"] .value {
+		color: var(--bad);
+		font-weight: 600;
+	}
+
+	.note {
+		font-size: 0.82rem;
+		color: var(--fg-muted);
+		margin: 0.9rem 0 0;
+	}
+
+	@media (max-width: 40rem) {
+		.row {
+			grid-template-columns: 1fr auto;
+		}
+
+		.bar {
+			grid-column: 1 / -1;
+			grid-row: 2;
+		}
+	}
+</style>

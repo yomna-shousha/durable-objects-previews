@@ -1,0 +1,251 @@
+:root {
+	--bg: #ffffff;
+	--bg-soft: #f6f7f9;
+	--fg: #1b1f24;
+	--fg-muted: #57606a;
+	--border: #d8dee4;
+	--accent: #0f766e;
+	--accent-soft: #e6f4f2;
+	--good: #1a7f37;
+	--good-soft: #e7f5ea;
+	--warn: #9a6700;
+	--warn-soft: #fff6db;
+	--bad: #cf222e;
+	--bad-soft: #ffebe9;
+	--radius: 10px;
+	--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0d1117;
+		--bg-soft: #161b22;
+		--fg: #e6edf3;
+		--fg-muted: #9198a1;
+		--border: #30363d;
+		--accent: #2dd4bf;
+		--accent-soft: #10302d;
+		--good: #3fb950;
+		--good-soft: #12261a;
+		--warn: #d29922;
+		--warn-soft: #2b2111;
+		--bad: #f85149;
+		--bad-soft: #2d1416;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+	scroll-padding-top: 1rem;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+	max-width: 52rem;
+	margin: 0 auto;
+	padding: 3rem 1.25rem 5rem;
+}
+
+h1 {
+	font-size: clamp(1.9rem, 4vw, 2.6rem);
+	line-height: 1.2;
+	margin: 0 0 1rem;
+	letter-spacing: -0.02em;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin: 3.5rem 0 1rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--border);
+	letter-spacing: -0.01em;
+}
+
+h3 {
+	font-size: 1.15rem;
+	margin: 2rem 0 0.5rem;
+}
+
+p,
+ul,
+ol {
+	margin: 0 0 1rem;
+}
+
+li + li {
+	margin-top: 0.35rem;
+}
+
+a {
+	color: var(--accent);
+	text-underline-offset: 2px;
+}
+
+code {
+	font-family: var(--mono);
+	font-size: 0.88em;
+	background: var(--bg-soft);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+	padding: 0.05em 0.35em;
+}
+
+pre {
+	border-radius: var(--radius);
+	padding: 1rem 1.1rem;
+	overflow-x: auto;
+	font-size: 0.85rem;
+	line-height: 1.55;
+	margin: 0 0 1.25rem;
+	tab-size: 2;
+}
+
+pre code {
+	background: none;
+	border: 0;
+	padding: 0;
+	font-size: inherit;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 0 0 1.5rem;
+	font-size: 0.93rem;
+}
+
+th,
+td {
+	text-align: left;
+	vertical-align: top;
+	padding: 0.6rem 0.75rem;
+	border-bottom: 1px solid var(--border);
+}
+
+th {
+	background: var(--bg-soft);
+	font-weight: 600;
+}
+
+.table-wrap {
+	overflow-x: auto;
+}
+
+.lede {
+	font-size: 1.15rem;
+	color: var(--fg-muted);
+	margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--accent);
+	margin-bottom: 0.5rem;
+}
+
+.toc {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin: 1.5rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.toc li + li {
+	margin: 0;
+}
+
+.toc a {
+	display: inline-block;
+	padding: 0.3rem 0.75rem;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	font-size: 0.88rem;
+	text-decoration: none;
+	color: var(--fg);
+}
+
+.toc a:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.callout {
+	border: 1px solid var(--border);
+	border-left: 4px solid var(--accent);
+	background: var(--accent-soft);
+	border-radius: var(--radius);
+	padding: 1rem 1.25rem;
+	margin: 0 0 1.5rem;
+}
+
+.callout > :last-child {
+	margin-bottom: 0;
+}
+
+.callout.warn {
+	border-left-color: var(--warn);
+	background: var(--warn-soft);
+}
+
+.formula {
+	font-family: var(--mono);
+	font-size: 1rem;
+	background: var(--bg-soft);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 1rem 1.25rem;
+	margin: 0 0 1.25rem;
+	text-align: center;
+}
+
+.badge {
+	display: inline-block;
+	font-size: 0.75rem;
+	font-weight: 600;
+	padding: 0.15rem 0.55rem;
+	border-radius: 999px;
+	white-space: nowrap;
+}
+
+.badge.good {
+	color: var(--good);
+	background: var(--good-soft);
+}
+
+.badge.warn {
+	color: var(--warn);
+	background: var(--warn-soft);
+}
+
+.badge.bad {
+	color: var(--bad);
+	background: var(--bad-soft);
+}
+
+.muted {
+	color: var(--fg-muted);
+}
+
+footer {
+	margin-top: 4rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--border);
+	font-size: 0.88rem;
+	color: var(--fg-muted);
+}

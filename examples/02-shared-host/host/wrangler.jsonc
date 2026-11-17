@@ -1,0 +1,16 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	// Owns the Durable Object classes. Deploy it from main; never preview it.
+	"name": "my-app-do",
+	"main": "src/index.js",
+	"compatibility_date": "2026-11-17",
+	"workers_dev": false,
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter", "Chat"] }],
+	"env": {
+		// A second copy for Previews, so they never touch production state.
+		// Deploy with: npx wrangler deploy --env staging
+		"staging": {
+			"name": "my-app-do-staging"
+		}
+	}
+}

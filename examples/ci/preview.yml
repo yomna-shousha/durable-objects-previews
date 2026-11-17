@@ -1,0 +1,69 @@
+# Example GitHub Actions workflow for the shared host pattern, with an isolated
+# fallback for pull requests that change Durable Object code.
+#
+# Copy to .github/workflows/preview.yml in a repository laid out like
+# examples/02-shared-host (a host/ folder and an app/ folder, each with a
+# package.json that lists wrangler as a dev dependency).
+#
+# Required repository secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  PREVIEW: pr-${{ github.event.number }}
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            objects:
+              - 'host/src/**'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      # Default: zero new Durable Object namespaces.
+      - name: Preview against the shared staging host
+        if: steps.changes.outputs.objects != 'true'
+        run: npx wrangler preview --name "$PREVIEW" --var "PREVIEW_SCOPE:$PREVIEW"
+
+      # Durable Object code changed: one namespace per class, for this PR only.
+      - name: Isolated Preview with the branch's Durable Object code
+        if: steps.changes.outputs.objects == 'true'
+        run: npx wrangler preview --config wrangler.isolated.jsonc --name "$PREVIEW" --var "PREVIEW_SCOPE:$PREVIEW"
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      # A PR may have used either Worker over its lifetime, so try both.
+      # Deleting a Preview frees its Durable Object namespaces right away.
+      - run: npx wrangler preview delete --name "$PREVIEW" --skip-confirmation || true
+      - run: npx wrangler preview delete --config wrangler.isolated.jsonc --name "$PREVIEW" --skip-confirmation || true

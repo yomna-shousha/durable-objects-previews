@@ -1,0 +1,26 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	// Only for pull requests that change Durable Object code.
+	// Costs one namespace per class per Preview, like 01-per-preview.
+	// Usage: npx wrangler preview --config wrangler.isolated.jsonc --name pr-123
+	"name": "my-app-isolated",
+	"main": "src/isolated.js",
+	"compatibility_date": "2026-11-17",
+	"workers_dev": true,
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter", "Chat"] }],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "COUNTER", "class_name": "Counter" },
+			{ "name": "CHAT", "class_name": "Chat" }
+		]
+	},
+	"previews": {
+		"vars": { "PREVIEW_SCOPE": "preview" },
+		"durable_objects": {
+			"bindings": [
+				{ "name": "COUNTER", "class_name": "Counter" },
+				{ "name": "CHAT", "class_name": "Chat" }
+			]
+		}
+	}
+}
